@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LanaSoft.Brain.Mcp/LanaSoft.Brain.Mcp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LanaSoft.Brain.Mcp.Tests/LanaSoft.Brain.Mcp.Tests.csproj" />
+  </Folder>
+</Solution>

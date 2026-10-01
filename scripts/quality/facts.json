@@ -1,0 +1,36 @@
+{
+  "facts": [
+    "Le projet atlas utilise Mem0 comme moteur de mémoire, retenu le 2026-03-02 parce que changer de moteur plus tard avec des mémoires en production serait plus pénible.",
+    "Les secrets de l'infrastructure de démo sont stockés dans HashiCorp Vault et synchronisés dans Kubernetes par External Secrets Operator.",
+    "Sealed Secrets a été écarté parce qu'il fallait garder la clé du contrôleur hors du cluster et la sauvegarder à part.",
+    "Le cluster Kubernetes de démo tourne sous k3s et est piloté en GitOps par Flux depuis le dépôt platform.",
+    "La base PostgreSQL de production du projet atlas est un cluster CloudNativePG à trois instances.",
+    "Postgres est partagé par environnement plutôt qu'un par application, pour économiser la mémoire des nœuds.",
+    "L'authentification unique des applications internes passe par Keycloak, realm demo.",
+    "Authentik a été écarté au profit de Keycloak parce que l'équipe le connaissait déjà.",
+    "La console d'administration de Keycloak n'est accessible que depuis le VPN, jamais depuis Internet.",
+    "Les jetons d'accès du realm demo durent 10 minutes.",
+    "Les images de conteneurs sont publiées sur Harbor, sous registry.example.com/<projet>/<service>.",
+    "Les charts Helm sont publiés en OCI sur Harbor, sous registry.example.com/charts/<projet>.",
+    "Le DNS public du domaine example.com est hébergé chez Cloudflare.",
+    "L'ingress controller du cluster de démo est Traefik depuis le 2026-02-10, en remplacement d'ingress-nginx.",
+    "Les nœuds node-3 et node-4 forment le tier data, réservé aux bases de données et aux charges avec stockage.",
+    "Longhorn garde trois copies de chaque volume par défaut, et une seule pour les bases CloudNativePG, déjà répliquées.",
+    "Le service de facturation d'atlas s'appuie sur trois microservices : api, worker et notifier.",
+    "Le plafond mensuel de dépenses cloud du projet atlas est de 400 euros.",
+    "Alice préfère qu'on lui propose un plan et qu'on attende sa validation avant d'écrire du code ou des manifestes.",
+    "Les embeddings de la mémoire partagée sont calculés par Gemini en 768 dimensions."
+  ],
+  "questions": [
+    {"q": "Pourquoi a-t-on gardé Mem0 plutôt qu'un simple pgvector ?", "expect": 0},
+    {"q": "Où sont rangés les mots de passe et clés d'API de l'infra ?", "expect": 1},
+    {"q": "Pour quelle raison n'utilise-t-on pas Sealed Secrets ?", "expect": 2},
+    {"q": "Combien d'instances a la base de prod ?", "expect": 4},
+    {"q": "Quel outil gère la connexion unique aux applis ?", "expect": 6},
+    {"q": "Peut-on ouvrir l'admin Keycloak depuis l'extérieur ?", "expect": 8},
+    {"q": "Quelle est l'adresse du registre d'images Docker ?", "expect": 10},
+    {"q": "Qui héberge les enregistrements DNS publics ?", "expect": 12},
+    {"q": "Combien peut-on dépenser en cloud par mois au maximum ?", "expect": 17},
+    {"q": "Comment Alice aime-t-elle qu'on travaille avec elle ?", "expect": 18}
+  ]
+}

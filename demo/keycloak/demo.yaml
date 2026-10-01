@@ -1,0 +1,104 @@
+# Realm demo, appliqué par keycloak-config-cli (même format que le realm de production). Les
+# valeurs secrètes viennent de demo/.env. Pas de syntaxe de variable dans les commentaires :
+# keycloak-config-cli la remplace aussi.
+realm: demo
+enabled: true
+displayName: brain (démo)
+registrationAllowed: false
+bruteForceProtected: true
+
+# Jetons d'accès courts ; les clients MCP les renouvellent par refresh token.
+accessTokenLifespan: 600
+
+# Scopes proposés à tous les clients, y compris ceux créés à la volée par CIMD.
+defaultDefaultClientScopes: [basic, profile, email, roles, web-origins, acr]
+defaultOptionalClientScopes: [offline_access, brain, "brain:write"]
+
+# Keycloak ne gère pas encore le paramètre resource (RFC 8707) : chaque scope ajoute lui-même
+# l'audience attendue par la passerelle, qui refuse tout jeton sans elle.
+clientScopes:
+  - name: brain
+    description: Lire la mémoire partagée
+    protocol: openid-connect
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "true"
+      consent.screen.text: Lire ta mémoire partagée (brain)
+    protocolMappers:
+      - name: audience-brain
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        config:
+          included.custom.audience: $(env:MCP_RESOURCE)
+          access.token.claim: "true"
+          id.token.claim: "false"
+          introspection.token.claim: "true"
+  - name: "brain:write"
+    description: Écrire dans la mémoire partagée
+    protocol: openid-connect
+    attributes:
+      include.in.token.scope: "true"
+      display.on.consent.screen: "true"
+      consent.screen.text: Ajouter ou supprimer des souvenirs dans ta mémoire partagée (brain)
+    protocolMappers:
+      - name: audience-brain
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        config:
+          included.custom.audience: $(env:MCP_RESOURCE)
+          access.token.claim: "true"
+          id.token.claim: "false"
+          introspection.token.claim: "true"
+
+# Client ID Metadata Document : un client MCP dont le client_id est une URL https d'un domaine de
+# confiance (Claude Code, VS Code) est accepté sans enregistrement préalable.
+clientProfiles:
+  profiles:
+    - name: cimd-profile
+      description: Clients MCP identifiés par un Client ID Metadata Document
+      executors:
+        - executor: client-id-metadata-document
+          configuration:
+            cimd-allow-http-scheme: "false"
+            cimd-allow-permitted-domains: [claude.ai, localhost, 127.0.0.1, vscode.dev, code.visualstudio.com]
+            cimd-restrict-same-domain: "false"
+            only-allow-confidential-client: "false"
+clientPolicies:
+  policies:
+    - name: cimd-policy
+      description: Applique cimd-profile aux client_id en URL https des domaines de confiance
+      enabled: true
+      conditions:
+        - condition: client-id-uri
+          configuration:
+            client-id-uri-scheme: [https]
+            client-id-uri-allow-permitted-domains: [claude.ai, vscode.dev, code.visualstudio.com]
+      profiles: [cimd-profile]
+
+users:
+  - username: demo
+    enabled: true
+    email: demo@example.com
+    emailVerified: true
+    firstName: Demo
+    lastName: User
+    credentials:
+      - type: password
+        value: $(env:DEMO_USER_PASSWORD)
+        temporary: false
+
+clients:
+  # Modèle d'agent maison : client confidentiel, grant client credentials. Ses mémoires
+  # appartiennent au propriétaire configuré dans la passerelle (Brain__AgentOwner).
+  - clientId: demo-agent
+    name: Agent de démo
+    enabled: true
+    publicClient: false
+    clientAuthenticatorType: client-secret
+    secret: $(env:DEMO_AGENT_SECRET)
+    serviceAccountsEnabled: true
+    standardFlowEnabled: false
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    defaultClientScopes: [basic, brain]
+    optionalClientScopes: ["brain:write"]

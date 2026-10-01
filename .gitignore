@@ -1,0 +1,13 @@
+# Dépôt officiel mem0ai/mem0, cloné par la CI (et en local pour construire l'image).
+upstream/
+# Charts packagés par la CI.
+out/
+__pycache__/
+*.pyc
+.env
+
+# .NET
+bin/
+obj/
+*.user
+TestResults/

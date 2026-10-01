@@ -1,0 +1,57 @@
+# Passerelle publique : Claude.ai, Claude Code et VS Code doivent pouvoir la joindre de partout.
+# Tout appel est authentifié par la passerelle (jeton du fournisseur d'identité) ; seuls /healthz
+# et les métadonnées de ressource protégée sont anonymes. Limite de débit Traefik par IP en plus de
+# la limite par identité de la passerelle.
+{{- $tls := printf "%s-tls" (replace "." "-" .Values.host) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-mcp-rate-limit@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts: [{{ .Values.host }}]
+      secretName: {{ $tls }}
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp
+                port:
+                  name: http
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: mcp-rate-limit
+spec:
+  rateLimit:
+    average: {{ .Values.rateLimit.average }}
+    burst: {{ .Values.rateLimit.burst }}
+---
+# Seul Traefik joint la passerelle.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mcp
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - port: 8080

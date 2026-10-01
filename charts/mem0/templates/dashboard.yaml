@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mem0-dashboard
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+    app.kubernetes.io/name: mem0-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mem0-dashboard
+  template:
+    metadata:
+      labels:
+        {{- include "mem0.labels" . | nindent 8 }}
+        app.kubernetes.io/name: mem0-dashboard
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dashboard
+          image: {{ include "mem0.image" (dict "image" .Values.image.dashboard "root" .) }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            # Appels du navigateur : l'API passe par le même nom d'hôte, sous /mem0 (/api
+            # appartient aux routes propres du dashboard : /api/auth/refresh, /api/health).
+            - name: NEXT_PUBLIC_API_URL
+              value: https://{{ .Values.host }}/mem0
+            # Appels côté serveur du dashboard : directement dans le cluster.
+            - name: API_INTERNAL_URL
+              value: http://mem0-api:8000
+            - name: NEXT_PUBLIC_INSTANCE_NAME
+              value: {{ .Values.dashboard.instanceName | quote }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          # Système de fichiers en écriture : l'entrypoint officiel remplace au démarrage les
+          # valeurs NEXT_PUBLIC_* dans les fichiers compilés.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mem0-dashboard
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: mem0-dashboard
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

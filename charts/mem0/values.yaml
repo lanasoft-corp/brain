@@ -1,0 +1,73 @@
+# Images construites par la CI de ce dépôt. Tag par défaut : appVersion du chart ; figer le digest
+# dans les values du déploiement.
+image:
+  api:
+    repository: registry.example.com/brain/mem0-api
+    tag: ""
+    digest: ""
+  dashboard:
+    repository: registry.example.com/brain/mem0-dashboard
+    tag: ""
+    digest: ""
+  pullSecrets: []
+
+# Configuration Mem0 (dossier files/) : config.json pour Claude Haiku et Gemini, config.local.json
+# pour un LLM et des embeddings servis par Ollama (variables OLLAMA_BASE_URL et OLLAMA_LLM_MODEL,
+# à fournir par api.extraEnv). Les deux n'ont pas la même dimension de vecteurs : chacune a sa
+# collection.
+configFile: config.json
+
+# URL du dashboard, réservée au réseau privé : le dashboard sur /, l'API sur /mem0.
+host: brain-dashboard.example.com
+# Plages d'adresses autorisées à joindre le dashboard et l'API (middleware Traefik ipAllowList).
+lanRanges:
+  - 192.168.0.0/16
+
+ingress:
+  className: traefik
+  # Annotations propres au cluster, ex. l'émetteur de certificats de cert-manager.
+  annotations: {}
+
+# Secret de connexion à la base (clés host, port, dbname, username, password), créé hors chart.
+# Les vecteurs et la base applicative (comptes, clés d'API) partagent la même base.
+database:
+  secret: brain-db
+
+# Secret des clés (JWT_SECRET, ANTHROPIC_API_KEY, GOOGLE_API_KEY). Avec store (ClusterSecretStore)
+# renseigné, le chart le crée par un ExternalSecret : variable -> nom du secret distant ; sinon, le
+# Secret est créé hors chart.
+secrets:
+  name: mem0-secrets
+  store: ""
+  remote:
+    JWT_SECRET: mem0-jwt-secret
+    ANTHROPIC_API_KEY: anthropic-api-key
+    GOOGLE_API_KEY: google-api-key
+
+# Historique SQLite de Mem0 (ajouts, mises à jour, suppressions) : un seul réplica, volume RWO.
+persistence:
+  size: 1Gi
+  # Vide : StorageClass par défaut du cluster.
+  storageClass: ""
+
+api:
+  # Variables d'environnement ajoutées au conteneur, ex. OLLAMA_BASE_URL.
+  extraEnv: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      memory: 1Gi
+  # Pods autorisés à appeler l'API en plus de Traefik et du dashboard : ceux qui portent ce label
+  # (brain-mcp, scripts de réindexation et de test).
+  clientLabel: mem0-client
+
+dashboard:
+  instanceName: brain
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

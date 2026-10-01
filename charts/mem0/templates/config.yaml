@@ -1,0 +1,34 @@
+# Configuration Mem0 : seule source de vérité (POST /configure est désactivé, cf.
+# mem0/lanasoft_main.py). Les ${VARIABLES} sont remplacées au démarrage par l'environnement.
+# configFile choisit le fichier : config.json (API Claude et Gemini) ou config.local.json (Ollama).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mem0-config
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+data:
+  config.json: |-
+    {{- .Files.Get (printf "files/%s" .Values.configFile) | required "configFile introuvable dans files/" | nindent 4 }}
+{{- if .Values.secrets.store }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ .Values.secrets.name }}
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.secrets.store }}
+  target:
+    name: {{ .Values.secrets.name }}
+  data:
+    {{- range $env, $remote := .Values.secrets.remote }}
+    - secretKey: {{ $env }}
+      remoteRef:
+        key: {{ $remote }}
+    {{- end }}
+{{- end }}

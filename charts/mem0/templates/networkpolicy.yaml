@@ -1,0 +1,45 @@
+# API : Traefik (dashboard vu du navigateur), le dashboard (appels côté serveur) et les clients
+# marqués du label api.clientLabel (brain-mcp, scripts). Dashboard : Traefik seulement.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mem0-api
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mem0-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mem0-dashboard
+        - podSelector:
+            matchLabels:
+              {{ .Values.api.clientLabel }}: "true"
+      ports:
+        - port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mem0-dashboard
+  labels:
+    {{- include "mem0.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mem0-dashboard
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - port: 3000

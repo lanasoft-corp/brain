@@ -1,0 +1,8 @@
+apiVersion: v2
+name: mem0
+description: Mem0 auto-hébergé pour brain (API REST + dashboard), configuration par fichier
+type: application
+# version et appVersion remplacées par la CI (GitVersion) : chart et images portent la même
+# version. Les valeurs ci-dessous ne servent qu'en local.
+version: 0.1.0
+appVersion: "0.1.0"

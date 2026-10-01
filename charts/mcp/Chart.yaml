@@ -1,0 +1,7 @@
+apiVersion: v2
+name: mcp
+description: Passerelle MCP de brain, devant Mem0, authentifiée par OAuth (Keycloak)
+type: application
+# version et appVersion remplacées par la CI (GitVersion) : chart et image portent la même version.
+version: 0.1.0
+appVersion: "0.1.0"

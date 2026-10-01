@@ -1,0 +1,35 @@
+{
+  "version": "v1.1",
+  "vector_store": {
+    "provider": "pgvector",
+    "config": {
+      "host": "${POSTGRES_HOST}",
+      "port": ${POSTGRES_PORT},
+      "dbname": "${POSTGRES_DB}",
+      "user": "${POSTGRES_USER}",
+      "password": "${POSTGRES_PASSWORD}",
+      "collection_name": "memories_local",
+      "embedding_model_dims": 1024,
+      "hnsw": true
+    }
+  },
+  "llm": {
+    "provider": "ollama",
+    "config": {
+      "ollama_base_url": "${OLLAMA_BASE_URL}",
+      "model": "${OLLAMA_LLM_MODEL}",
+      "temperature": 0.1,
+      "max_tokens": 2000
+    }
+  },
+  "embedder": {
+    "provider": "ollama",
+    "config": {
+      "ollama_base_url": "${OLLAMA_BASE_URL}",
+      "model": "bge-m3",
+      "embedding_dims": 1024
+    }
+  },
+  "history_db_path": "/data/history.db",
+  "custom_instructions": "Tu extrais des faits durables pour la mémoire partagée entre les assistants de l'utilisateur. Règles : écris chaque fait en français, dans la langue d'origine, sans jamais traduire ni reformuler les noms propres, identifiants techniques, commandes ou chemins. Un fait = une phrase autonome et courte, compréhensible sans le contexte de la conversation. Pour une décision, garde toujours sa raison dans la même phrase (« X a été choisi parce que Y »). Garde les dates absolues (AAAA-MM-JJ), jamais « hier » ou « la semaine prochaine ». Ignore les salutations, les hésitations et les étapes intermédiaires sans valeur durable. N'extrais jamais de secret : mot de passe, clé d'API, jeton, IBAN, numéro de carte."
+}

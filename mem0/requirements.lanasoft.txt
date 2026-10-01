@@ -1,0 +1,8 @@
+# Ajouts au requirements.txt du serveur officiel.
+# - mem0ai figé sur la version du tag du serveur (l'officiel accepte >=0.1.48) ;
+# - google-genai : utilisé par l'embedder Gemini de mem0ai 2.x, absent de l'officiel. Branche 1.x :
+#   la 2.x exige pydantic>=2.12.5, or le serveur fige pydantic==2.10.4 ;
+# - ollama : LLM et embeddings locaux (charts/mem0/files/config.local.json), absent de l'officiel.
+mem0ai==2.2.1
+google-genai==1.75.0
+ollama==0.6.3

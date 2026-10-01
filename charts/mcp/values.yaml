@@ -1,0 +1,52 @@
+image:
+  repository: registry.example.com/brain/mcp
+  tag: ""
+  digest: ""
+  pullSecrets: []
+
+# URL publique de la passerelle : doit correspondre à l'audience des jetons (Brain:Resource).
+host: brain.example.com
+
+replicas: 2
+
+brain:
+  # Émetteur des jetons (realm du fournisseur d'identité). Obligatoire.
+  authority: ""
+  # Nom d'utilisateur propriétaire des mémoires écrites par les agents (client credentials). Obligatoire.
+  agentOwner: ""
+  # Noms courts des clients dont l'identifiant OAuth est une URL, pour agent_id.
+  agentAliases:
+    - clientId: https://claude.ai/oauth/claude-code-client-metadata
+      name: claude-code
+  mem0Url: http://mem0-api:8000
+  requestsPerMinute: 60
+  # Similarité cosinus minimale d'un fait proche renvoyé par session_summary.
+  relatedMinScore: 0.75
+
+# Secret qui porte la clé m0sk_ de l'API Mem0 (clé mem0ApiKey). Avec store (ClusterSecretStore)
+# renseigné, le chart le crée par un ExternalSecret depuis le secret distant nommé mem0ApiKey ;
+# sinon, le Secret est créé hors chart.
+secrets:
+  name: mcp-secrets
+  store: ""
+  mem0ApiKey: mem0-api-key
+
+# Label qui ouvre l'API Mem0 à ces pods (NetworkPolicy du chart mem0, même valeur des deux côtés).
+mem0ClientLabel: mem0-client
+
+ingress:
+  className: traefik
+  # Annotations propres au cluster : émetteur de certificats, DNS externe...
+  annotations: {}
+
+# Limite Traefik par IP source, en amont de la limite par identité de la passerelle.
+rateLimit:
+  average: 30
+  burst: 60
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 384Mi

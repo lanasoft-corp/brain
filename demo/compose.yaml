@@ -1,0 +1,143 @@
+# Démo locale de brain : passerelle MCP, Mem0 (API + dashboard), pgvector et un Keycloak avec un
+# realm de démo. Même chemin OAuth qu'en production, sans mode d'authentification dégradé.
+# Mode d'emploi : demo/README.md. Tous les ports n'écoutent que sur 127.0.0.1 ; MCP_PORT et
+# KEYCLOAK_PORT (demo/.env) les changent si 8080 ou 8081 sont déjà pris.
+name: brain-demo
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à renseigner dans demo/.env}
+      POSTGRES_DB: brain
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -d brain -U brain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  # Image construite depuis le serveur Mem0 officiel cloné dans ../upstream (voir README).
+  mem0-api:
+    build:
+      context: ..
+      dockerfile: mem0/Dockerfile
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: brain
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Base applicative (comptes, clés d'API) : la même que les vecteurs, comme en production.
+      APP_DB_NAME: brain
+      JWT_SECRET: ${MEM0_JWT_SECRET:?à renseigner dans demo/.env}
+      # Clé d'administration : la passerelle l'utilise comme X-API-Key.
+      ADMIN_API_KEY: ${MEM0_ADMIN_API_KEY:?à renseigner dans demo/.env}
+      # Mode API (config.json) : Claude Haiku et Gemini. Inutiles en mode local.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # Mode local (config.local.json, profil local) : LLM et embeddings servis par Ollama.
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:7b}
+      DASHBOARD_URL: http://localhost:3000
+      AUTH_DISABLED: "false"
+    volumes:
+      # Même configuration que le chart : config.json (Claude Haiku et Gemini, par défaut) ou
+      # config.local.json (Ollama), choisie par MEM0_CONFIG.
+      - ../charts/mem0/files/${MEM0_CONFIG:-config.json}:/etc/mem0/config.json:ro
+      - mem0-data:/data
+    ports:
+      # Appelée par le navigateur depuis le dashboard.
+      - 127.0.0.1:8888:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+        required: false
+
+  # Profil local : Ollama sert le LLM d'extraction et les embeddings (bge-m3, 1024 dimensions).
+  ollama:
+    image: ollama/ollama:0.35.0
+    profiles: [local]
+    volumes:
+      - ollama:/root/.ollama
+
+  # Télécharge les deux modèles au premier démarrage, puis s'arrête.
+  ollama-pull:
+    image: ollama/ollama:0.35.0
+    profiles: [local]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: [sh, -c, "sleep 3 && ollama pull bge-m3 && ollama pull ${OLLAMA_LLM_MODEL:-qwen2.5:7b}"]
+    depends_on:
+      - ollama
+
+  mem0-dashboard:
+    build: ../upstream/server/dashboard
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8888
+      API_INTERNAL_URL: http://mem0-api:8000
+      NEXT_PUBLIC_INSTANCE_NAME: brain (démo)
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      - mem0-api
+
+  # Fournisseur d'identité. L'émetteur des jetons est toujours l'adresse vue du navigateur et des
+  # clients MCP (localhost:KEYCLOAK_PORT) ; la passerelle lit les clés par keycloak:8080.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: [start-dev, --features=cimd]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?à renseigner dans demo/.env}
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8081}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    ports:
+      - 127.0.0.1:${KEYCLOAK_PORT:-8081}:8080
+
+  # Crée le realm demo (scopes brain et brain:write, utilisateur, client d'agent), puis s'arrête.
+  keycloak-config:
+    image: docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_AVAILABILITYCHECK_ENABLED: "true"
+      KEYCLOAK_AVAILABILITYCHECK_TIMEOUT: 300s
+      IMPORT_FILES_LOCATIONS: /config/*
+      IMPORT_VARSUBSTITUTION_ENABLED: "true"
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?à renseigner dans demo/.env}
+      DEMO_AGENT_SECRET: ${DEMO_AGENT_SECRET:?à renseigner dans demo/.env}
+      # Audience ajoutée aux jetons par les scopes brain et brain:write.
+      MCP_RESOURCE: http://localhost:${MCP_PORT:-8080}/mcp
+    volumes:
+      - ./keycloak:/config:ro
+    depends_on:
+      - keycloak
+
+  mcp:
+    build:
+      context: ..
+      dockerfile: demo/mcp.Dockerfile
+    environment:
+      Brain__Resource: http://localhost:${MCP_PORT:-8080}/mcp
+      Brain__Authority: http://localhost:${KEYCLOAK_PORT:-8081}/realms/demo
+      Brain__MetadataAddress: http://keycloak:8080/realms/demo/.well-known/openid-configuration
+      Brain__RequireHttpsMetadata: "false"
+      Brain__AgentOwner: demo
+      Brain__Mem0Url: http://mem0-api:8000
+      Brain__Mem0ApiKey: ${MEM0_ADMIN_API_KEY}
+    ports:
+      - 127.0.0.1:${MCP_PORT:-8080}:8080
+    depends_on:
+      - mem0-api
+      - keycloak
+
+volumes:
+  postgres:
+  mem0-data:
+  ollama:

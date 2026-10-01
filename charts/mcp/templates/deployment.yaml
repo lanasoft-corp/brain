@@ -1,0 +1,137 @@
+{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp
+  labels:
+    app.kubernetes.io/name: mcp
+    app.kubernetes.io/part-of: brain
+spec:
+  # Deux réplicas : la passerelle est sans état (transport MCP en mode stateless), pas besoin
+  # d'affinité de session.
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp
+        app.kubernetes.io/part-of: brain
+        {{ .Values.mem0ClientLabel }}: "true"
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654   # utilisateur « app » des images .NET
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: mcp
+      containers:
+        - name: mcp
+          image: {{ .Values.image.repository }}:{{ $tag }}{{ with .Values.image.digest }}@{{ . }}{{ end }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ASPNETCORE_HTTP_PORTS
+              value: "8080"
+            - name: Brain__Resource
+              value: https://{{ .Values.host }}/mcp
+            - name: Brain__Authority
+              value: {{ required "brain.authority est obligatoire" .Values.brain.authority }}
+            - name: Brain__AgentOwner
+              value: {{ required "brain.agentOwner est obligatoire" .Values.brain.agentOwner }}
+            {{- range $i, $a := .Values.brain.agentAliases }}
+            - name: Brain__AgentAliases__{{ $i }}__ClientId
+              value: {{ $a.clientId | quote }}
+            - name: Brain__AgentAliases__{{ $i }}__Name
+              value: {{ $a.name | quote }}
+            {{- end }}
+            - name: Brain__Mem0Url
+              value: {{ .Values.brain.mem0Url }}
+            - name: Brain__RequestsPerMinute
+              value: {{ .Values.brain.requestsPerMinute | quote }}
+            - name: Brain__RelatedMinScore
+              value: {{ .Values.brain.relatedMinScore | quote }}
+            - name: Brain__Mem0ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.name }}
+                  key: mem0ApiKey
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp
+spec:
+  selector:
+    app.kubernetes.io/name: mcp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- if .Values.secrets.store }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ .Values.secrets.name }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.secrets.store }}
+  target:
+    name: {{ .Values.secrets.name }}
+  data:
+    - secretKey: mem0ApiKey
+      remoteRef:
+        key: {{ .Values.secrets.mem0ApiKey }}
+{{- end }}
