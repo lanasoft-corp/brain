@@ -8,6 +8,13 @@
         "dotnet-gitversion"
       ],
       "rollForward": false
+    },
+    "dotnet-sonarscanner": {
+      "version": "10.4.1",
+      "commands": [
+        "dotnet-sonarscanner"
+      ],
+      "rollForward": false
     }
   }
 }

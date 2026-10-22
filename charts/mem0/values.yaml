@@ -17,16 +17,34 @@ image:
 # collection.
 configFile: config.json
 
-# URL du dashboard, réservée au réseau privé : le dashboard sur /, l'API sur /mem0.
+# URL du dashboard, prévue pour le réseau privé : le dashboard sur /, l'API sur /mem0.
 host: brain-dashboard.example.com
-# Plages d'adresses autorisées à joindre le dashboard et l'API (middleware Traefik ipAllowList).
-lanRanges:
-  - 192.168.0.0/16
 
+# Désactivé par défaut : exposer le dashboard et l'API est le choix du cluster, avec les restrictions
+# de son contrôleur d'ingress (réseau privé seulement...) déclarées dans ses values (annotations,
+# extraObjects). Le contrôleur doit aussi retirer le préfixe /mem0 avant l'API (ingress.api).
 ingress:
-  className: traefik
-  # Annotations propres au cluster, ex. l'émetteur de certificats de cert-manager.
+  enabled: false
+  # Vide : la classe d'ingress par défaut du cluster.
+  className: ""
+  # Annotations des deux Ingress : émetteur de certificats, DNS externe...
   annotations: {}
+  # Annotations propres à un Ingress, ajoutées aux communes (et prioritaires).
+  dashboard:
+    annotations: {}
+  api:
+    annotations: {}
+
+networkPolicy:
+  # Qui peut joindre le dashboard et l'API : le namespace (et les pods) du contrôleur d'ingress. Laissé vide, personne
+  # hors du namespace (un namespaceSelector vide ouvrirait tous les namespaces, aucune règle n'est rendue).
+  ingressController:
+    namespaceSelector: {}
+    podSelector: {}
+
+# Manifestes rendus tels quels (via tpl), pour les objets propres au cluster comme les middlewares de
+# son contrôleur d'ingress.
+extraObjects: []
 
 # Secret de connexion à la base (clés host, port, dbname, username, password), créé hors chart.
 # Les vecteurs et la base applicative (comptes, clés d'API) partagent la même base.
@@ -59,7 +77,7 @@ api:
       memory: 384Mi
     limits:
       memory: 1Gi
-  # Pods autorisés à appeler l'API en plus de Traefik et du dashboard : ceux qui portent ce label
+  # Pods autorisés à appeler l'API en plus du contrôleur d'ingress et du dashboard : ceux qui portent ce label
   # (brain-mcp, scripts de réindexation et de test).
   clientLabel: mem0-client
 

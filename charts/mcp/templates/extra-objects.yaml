@@ -1,0 +1,6 @@
+{{- /* Manifestes fournis par les values, rendus tels quels (via tpl) : objets propres au cluster, comme
+les middlewares de son contrôleur d'ingress. */}}
+{{- range .Values.extraObjects }}
+---
+{{ tpl (toYaml .) $ }}
+{{- end }}

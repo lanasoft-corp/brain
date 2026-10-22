@@ -1,19 +1,22 @@
 # Passerelle publique : Claude.ai, Claude Code et VS Code doivent pouvoir la joindre de partout.
 # Tout appel est authentifié par la passerelle (jeton du fournisseur d'identité) ; seuls /healthz
-# et les métadonnées de ressource protégée sont anonymes. Limite de débit Traefik par IP en plus de
-# la limite par identité de la passerelle.
+# et les métadonnées de ressource protégée sont anonymes. Désactivée par défaut : l'exposer, et la
+# limiter (débit par IP source en amont de la limite par identité de la passerelle...), est le choix
+# du cluster, fait dans ses values avec les objets de son contrôleur d'ingress.
+{{- if .Values.ingress.enabled }}
 {{- $tls := printf "%s-tls" (replace "." "-" .Values.host) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mcp
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
-    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-mcp-rate-limit@kubernetescrd
+  {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
   tls:
     - hosts: [{{ .Values.host }}]
       secretName: {{ $tls }}
@@ -29,16 +32,8 @@ spec:
                 port:
                   name: http
 ---
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: mcp-rate-limit
-spec:
-  rateLimit:
-    average: {{ .Values.rateLimit.average }}
-    burst: {{ .Values.rateLimit.burst }}
----
-# Seul Traefik joint la passerelle.
+{{- end }}
+# Seul le contrôleur d'ingress joint la passerelle (personne si ses sélecteurs sont vides).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -48,10 +43,17 @@ spec:
     matchLabels:
       app.kubernetes.io/name: mcp
   policyTypes: [Ingress]
+  {{- with .Values.networkPolicy.ingressController }}
+  {{- if .namespaceSelector }}
   ingress:
     - from:
         - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: traefik
+            {{- toYaml .namespaceSelector | nindent 12 }}
+          {{- with .podSelector }}
+          podSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       ports:
         - port: 8080
+  {{- end }}
+  {{- end }}

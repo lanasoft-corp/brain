@@ -1,53 +1,55 @@
-# Démo locale
+# Local demo
 
-Lance brain sur ton poste avec Docker : la passerelle MCP, Mem0 (API et dashboard), PostgreSQL
-avec pgvector, et un Keycloak avec un realm de démo. L'authentification est la même qu'en
-production : OAuth, scopes `brain` et `brain:write`, audience vérifiée par la passerelle.
+Runs brain on your machine with Docker: the MCP gateway, Mem0 (API and dashboard), PostgreSQL with
+pgvector, and a Keycloak with a demo realm. Authentication is the same as in production: OAuth,
+scopes `brain` and `brain:write`, audience checked by the gateway.
 
-| Service | Adresse |
+[Version française](README.fr.md)
+
+| Service | Address |
 |---|---|
-| Passerelle MCP | http://localhost:8080/mcp |
+| MCP gateway | http://localhost:8080/mcp |
 | Keycloak (realm `demo`) | http://localhost:8081 |
-| Dashboard Mem0 | http://localhost:3000 |
-| API Mem0 (appelée par le dashboard) | http://localhost:8888 |
+| Mem0 dashboard | http://localhost:3000 |
+| Mem0 API (called by the dashboard) | http://localhost:8888 |
 
-Il faut une clé d'API Anthropic (Claude Haiku, extraction des faits) et une clé Google AI
-(Gemini, embeddings). Tout le reste tourne en local, et les ports n'écoutent que sur 127.0.0.1.
-Si 8080 ou 8081 sont déjà pris, `MCP_PORT` et `KEYCLOAK_PORT` dans `demo/.env` les changent ;
-adapte alors les adresses ci-dessous.
+You need an Anthropic API key (Claude Haiku, fact extraction) and a Google AI key (Gemini,
+embeddings). Everything else runs locally, and the ports only listen on 127.0.0.1. If 8080 or
+8081 are already taken, `MCP_PORT` and `KEYCLOAK_PORT` in `demo/.env` change them; adjust the
+addresses below accordingly.
 
-## Démarrer
+## Start
 
-Depuis la racine du dépôt :
+From the repository root:
 
 ```bash
-# Serveur Mem0 officiel, à la version dont l'image est construite. Sans conversion des fins de
-# ligne : sous Windows, un entrypoint.sh en CRLF empêche le dashboard de démarrer.
+# Official Mem0 server, at the version the image is built from. Without line-ending conversion:
+# on Windows, an entrypoint.sh in CRLF keeps the dashboard from starting.
 git clone -c core.autocrlf=false --depth 1 --branch v2.2.1 https://github.com/mem0ai/mem0.git upstream
 
 cp demo/.env.example demo/.env
-# remplir demo/.env : les deux clés d'API, puis des valeurs aléatoires (openssl rand -hex 24)
+# fill in demo/.env: the two API keys, then random values (openssl rand -hex 24)
 
 docker compose -f demo/compose.yaml up -d --build
 ```
 
-Le service `keycloak-config` crée le realm puis s'arrête : `docker compose -f demo/compose.yaml
-logs keycloak-config` doit finir sans erreur.
+The `keycloak-config` service creates the realm and then stops: `docker compose -f
+demo/compose.yaml logs keycloak-config` must end without an error.
 
-## Brancher Claude Code
+## Connect Claude Code
 
 ```bash
 claude mcp add --transport http brain http://localhost:8080/mcp
 ```
 
-Dans Claude Code, `/mcp` ouvre la connexion : identifie-toi avec l'utilisateur `demo` et le mot de
-passe `DEMO_USER_PASSWORD` de `demo/.env`. Claude Code s'identifie par son Client ID Metadata
-Document, sans enregistrement préalable dans Keycloak. Demande-lui ensuite de retenir un fait,
-puis de le retrouver dans une nouvelle session.
+In Claude Code, `/mcp` opens the connection: sign in with the user `demo` and the password
+`DEMO_USER_PASSWORD` from `demo/.env`. Claude Code identifies itself with its Client ID Metadata
+Document, with no prior registration in Keycloak. Then ask it to remember a fact, and to find it
+again in a new session.
 
-## Essayer sans client MCP
+## Try it without an MCP client
 
-Le client `demo-agent` obtient un jeton par client credentials, comme un agent maison :
+The `demo-agent` client gets a token with client credentials, like an agent of your own:
 
 ```bash
 source demo/.env
@@ -57,41 +59,38 @@ TOKEN=$(curl -s http://localhost:8081/realms/demo/protocol/openid-connect/token 
 
 curl -s http://localhost:8080/mcp -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"remember","arguments":{"fact":"La démo de brain tourne en local depuis aujourd hui.","project":"demo"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"remember","arguments":{"fact":"The brain demo has been running locally since today.","project":"demo"}}}'
 ```
 
-Sans jeton, la passerelle répond 401 et indique où trouver le serveur d'autorisation
+Without a token, the gateway answers 401 and says where to find the authorization server
 (`/.well-known/oauth-protected-resource`).
 
-## Tout en local, sans clé d'API
+## Fully local, with no API key
 
-Le profil `local` remplace Claude Haiku et Gemini par Ollama : un LLM local pour l'extraction des
-faits (`session_summary`) et `bge-m3` pour les embeddings. Aucune donnée ne quitte le poste. Dans
-`demo/.env` :
+The `local` profile replaces Claude Haiku and Gemini with Ollama: a local LLM for fact extraction
+(`session_summary`) and `bge-m3` for embeddings. No data leaves the machine. In `demo/.env`:
 
 ```bash
 COMPOSE_PROFILES=local
 MEM0_CONFIG=config.local.json
-OLLAMA_LLM_MODEL=qwen2.5:7b   # à choisir selon la mémoire disponible
+OLLAMA_LLM_MODEL=qwen2.5:7b   # pick one that fits the available memory
 ```
 
-Le service `ollama-pull` télécharge les deux modèles au premier démarrage, ce qui prend quelques
-minutes. Ollama tourne sur le CPU dans cette démo : l'extraction d'un résumé de session y est
-nettement plus lente qu'avec l'API. `remember` n'utilise pas le LLM (le fait est stocké tel quel),
-seulement l'embedding.
+The `ollama-pull` service downloads both models on first start, which takes a few minutes. Ollama
+runs on the CPU in this demo: extracting a session summary is much slower there than with the
+API. `remember` does not use the LLM (the fact is stored as written), only the embedding.
 
-Les deux modes n'ont pas la même dimension de vecteurs (768 pour Gemini, 1024 pour `bge-m3`) :
-chacun a sa collection, et changer de mode repart d'une mémoire vide.
+The two modes do not have the same vector dimension (768 for Gemini, 1024 for `bge-m3`): each has
+its own collection, and switching modes starts from an empty memory.
 
-## Relire la mémoire
+## Read the memory
 
-Le dashboard (http://localhost:3000) demande de créer un compte administrateur au premier
-passage. Il liste ensuite toutes les mémoires, avec leur projet, leur nature et l'agent qui les a
-écrites.
+The dashboard (http://localhost:3000) asks you to create an administrator account on first
+visit. It then lists every memory, with its project, its kind and the agent that wrote it.
 
-## Arrêter
+## Stop
 
 ```bash
-docker compose -f demo/compose.yaml down      # garde les données
-docker compose -f demo/compose.yaml down -v   # efface aussi la mémoire
+docker compose -f demo/compose.yaml down      # keeps the data
+docker compose -f demo/compose.yaml down -v   # also wipes the memory
 ```

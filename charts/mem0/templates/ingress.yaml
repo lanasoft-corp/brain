@@ -1,73 +1,41 @@
-# Dashboard réservé au réseau privé (lanRanges) : le dashboard sur /, l'API sur /mem0 (préfixe retiré
-# avant l'API). Le dashboard appelle l'API depuis le navigateur, d'où ce passage par Traefik ;
-# l'API garde sa propre authentification (JWT du dashboard ou clé m0sk_).
+# Dashboard prévu pour le réseau privé : le dashboard sur /, l'API sur /mem0, dont le contrôleur
+# d'ingress doit retirer le préfixe avant l'API. Le dashboard appelle l'API depuis le navigateur, d'où
+# ce passage par l'ingress ; l'API garde sa propre authentification (JWT du dashboard ou clé m0sk_).
+# Désactivé par défaut : les restrictions (réseau privé seulement) et le retrait du préfixe sont
+# déclarés dans les values du cluster, avec les objets de son contrôleur.
+{{- if .Values.ingress.enabled }}
 {{- $tls := printf "%s-tls" (replace "." "-" .Values.host) }}
+{{- range $name, $ing := dict "dashboard" (dict "service" "mem0-dashboard" "path" "/") "api" (dict "service" "mem0-api" "path" "/mem0") }}
+{{- $own := default dict (get (default dict (get $.Values.ingress $name)) "annotations") }}
+{{- $annotations := merge (deepCopy $own) (deepCopy (default dict $.Values.ingress.annotations)) }}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mem0-dashboard
+  name: {{ $ing.service }}
   labels:
-    {{- include "mem0.labels" . | nindent 4 }}
+    {{- include "mem0.labels" $ | nindent 4 }}
+  {{- with $annotations }}
   annotations:
-    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
-    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-lan-only@kubernetescrd
+  {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with $.Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
   tls:
-    - hosts: [{{ .Values.host }}]
+    - hosts: [{{ $.Values.host }}]
       secretName: {{ $tls }}
   rules:
-    - host: {{ .Values.host }}
+    - host: {{ $.Values.host }}
       http:
         paths:
-          - path: /
+          - path: {{ $ing.path }}
             pathType: Prefix
             backend:
               service:
-                name: mem0-dashboard
+                name: {{ $ing.service }}
                 port:
                   name: http
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: mem0-api
-  labels:
-    {{- include "mem0.labels" . | nindent 4 }}
-  annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-lan-only@kubernetescrd,{{ .Release.Namespace }}-strip-mem0@kubernetescrd
-spec:
-  ingressClassName: {{ .Values.ingress.className }}
-  tls:
-    - hosts: [{{ .Values.host }}]
-      secretName: {{ $tls }}
-  rules:
-    - host: {{ .Values.host }}
-      http:
-        paths:
-          - path: /mem0
-            pathType: Prefix
-            backend:
-              service:
-                name: mem0-api
-                port:
-                  name: http
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: lan-only
-spec:
-  ipAllowList:
-    sourceRange:
-      {{- toYaml .Values.lanRanges | nindent 6 }}
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: strip-mem0
-spec:
-  stripPrefix:
-    prefixes: [/mem0]
+{{- end }}
+{{- end }}

@@ -34,15 +34,26 @@ secrets:
 # Label qui ouvre l'API Mem0 à ces pods (NetworkPolicy du chart mem0, même valeur des deux côtés).
 mem0ClientLabel: mem0-client
 
+# Désactivé par défaut : exposer la passerelle est le choix du cluster, avec les restrictions de son
+# contrôleur d'ingress (limite de débit par IP source...) déclarées dans ses values (annotations,
+# extraObjects).
 ingress:
-  className: traefik
-  # Annotations propres au cluster : émetteur de certificats, DNS externe...
+  enabled: false
+  # Vide : la classe d'ingress par défaut du cluster.
+  className: ""
+  # Annotations propres au cluster : émetteur de certificats, DNS externe, middlewares du contrôleur...
   annotations: {}
 
-# Limite Traefik par IP source, en amont de la limite par identité de la passerelle.
-rateLimit:
-  average: 30
-  burst: 60
+networkPolicy:
+  # Qui peut joindre la passerelle : le namespace (et les pods) du contrôleur d'ingress. Laissé vide, personne
+  # hors du namespace (un namespaceSelector vide ouvrirait tous les namespaces, aucune règle n'est rendue).
+  ingressController:
+    namespaceSelector: {}
+    podSelector: {}
+
+# Manifestes rendus tels quels (via tpl), pour les objets propres au cluster comme les middlewares de
+# son contrôleur d'ingress.
+extraObjects: []
 
 resources:
   requests:
